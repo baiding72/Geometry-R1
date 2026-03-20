@@ -1,0 +1,51 @@
+# Geometry-R1 Phase 2: GRPO-based RL Configuration
+# Fine-tuning with Group Relative Policy Optimization using SymPy reward
+
+model:
+  name: "outputs/sft_phase1"  # Path to SFT checkpoint
+  trust_remote_code: true
+
+grpo:
+  # GRPO-specific parameters
+  num_generations: 4  # Number of samples per prompt for group comparison
+  temperature: 0.7
+  max_new_tokens: 512
+
+  # KL divergence coefficient
+  kl_coef: 0.1
+
+  # Advantage normalization
+  advantage_normalization: true
+
+training:
+  output_dir: "outputs/grpo_phase2"
+  num_train_epochs: 2
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 1e-6
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  logging_steps: 5
+  save_steps: 100
+  save_total_limit: 3
+  bf16: true
+  gradient_checkpointing: true
+
+reward:
+  # Reward function configuration
+  type: "sympy_equivalence"
+  module: "src.reward"
+  function: "accuracy_reward"
+
+  # Reward weights
+  correct_answer: 1.0
+  format_bonus: 0.1
+
+data:
+  train_file: "data/rl_geometry3k.jsonl"
+  image_dir: "data/images/rl"
+  max_length: 2048
+
+evaluation:
+  eval_steps: 50
+  eval_batch_size: 2

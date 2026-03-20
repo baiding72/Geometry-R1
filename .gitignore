@@ -1,0 +1,137 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Environments
+.env
+.env.local
+.env.*.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# uv
+.uv/
+uv.lock
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =============================================================================
+# Project Specific
+# =============================================================================
+
+# Generated data
+data/images/sft/*.png
+data/images/rl/*.png
+data/*.jsonl
+
+# Keep directory structure
+!data/.gitkeep
+!data/images/.gitkeep
+!data/images/sft/.gitkeep
+!data/images/rl/.gitkeep
+
+# Model checkpoints and outputs (critical for AutoDL)
+output/
+outputs/
+checkpoints/
+runs/
+
+# Logs
+logs/
+*.log
+
+# Hugging Face cache
+.cache/
+hf_cache/
+
+# =============================================================================
+# API Keys and Secrets (IMPORTANT: Never commit these!)
+# =============================================================================
+.env
+.env.*
+*.key
+*_api_key.txt
+secrets.yaml
+secrets.json
+credentials.json
+
+# AutoDL specific
+autodl-tmp/

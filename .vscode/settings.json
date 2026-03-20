@@ -1,0 +1,40 @@
+{
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+        }
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "python.linting.enabled": true,
+    "ruff.lineLength": 120,
+    "ruff.lint.select": [
+        "E",
+        "F",
+        "I",
+        "N",
+        "W",
+        "UP",
+        "B",
+        "C4",
+        "SIM"
+    ],
+    "ruff.lint.ignore": [
+        "E501"
+    ],
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.DS_Store": true
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/.cache/**": true,
+        "**/data/images/**": true
+    }
+}
