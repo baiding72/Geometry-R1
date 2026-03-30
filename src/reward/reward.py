@@ -8,8 +8,34 @@ using SymPy for symbolic computation.
 import re
 from typing import Optional
 
-from sympy import simplify
+from sympy import simplify, sympify
 from sympy.parsing.latex import parse_latex
+
+
+def completion_to_text(completion) -> str:
+    """
+    Convert TRL completion payloads to plain text.
+
+    GRPO can pass either raw strings or conversational message lists depending
+    on dataset format. This helper normalizes both cases.
+    """
+    if isinstance(completion, str):
+        return completion
+
+    if isinstance(completion, list):
+        parts: list[str] = []
+        for item in completion:
+            if isinstance(item, dict):
+                content = item.get("content", "")
+                if isinstance(content, str):
+                    parts.append(content)
+                elif isinstance(content, list):
+                    for chunk in content:
+                        if isinstance(chunk, dict) and chunk.get("type") == "text":
+                            parts.append(chunk.get("text", ""))
+        return "\n".join(part for part in parts if part)
+
+    return str(completion)
 
 
 def extract_answer(response: str) -> Optional[str]:
@@ -61,6 +87,46 @@ def normalize_latex(latex_str: str) -> str:
     return result
 
 
+def latex_to_sympy_expr(latex_str: str) -> str:
+    """
+    Convert a small subset of LaTeX into a sympify-friendly expression.
+
+    This fallback covers the common answer formats in geometry3k such as
+    fractions, roots, powers, and grouped arithmetic.
+    """
+    result = normalize_latex(latex_str)
+
+    frac_pattern = re.compile(r"\\frac\{([^{}]+)\}\{([^{}]+)\}")
+    sqrt_pattern = re.compile(r"\\sqrt\{([^{}]+)\}")
+
+    previous = None
+    while previous != result:
+        previous = result
+        result = frac_pattern.sub(r"((\1)/(\2))", result)
+        result = sqrt_pattern.sub(r"sqrt(\1)", result)
+
+    result = result.replace("{", "(").replace("}", ")")
+    result = result.replace("^", "**")
+    result = result.replace("\\cdot", "*")
+    result = result.replace("\\times", "*")
+    result = result.replace("\\pi", "pi")
+    return result
+
+
+def parse_math_expression(expr: str):
+    """
+    Parse a prediction/label expression into a SymPy expression.
+
+    We prefer SymPy's LaTeX parser, but fall back to a lightweight converter
+    when antlr4 is unavailable or the expression is not accepted as LaTeX.
+    """
+    normalized = normalize_latex(expr)
+    try:
+        return parse_latex(normalized)
+    except Exception:
+        return sympify(latex_to_sympy_expr(normalized))
+
+
 def check_mathematical_equivalence(pred: str, gt: str) -> bool:
     """
     Check if two mathematical expressions are equivalent using SymPy.
@@ -87,8 +153,8 @@ def check_mathematical_equivalence(pred: str, gt: str) -> bool:
     # Try symbolic equivalence
     try:
         # Parse LaTeX expressions
-        pred_expr = parse_latex(pred_normalized)
-        gt_expr = parse_latex(gt_normalized)
+        pred_expr = parse_math_expression(pred_normalized)
+        gt_expr = parse_math_expression(gt_normalized)
 
         # Check if difference simplifies to zero
         diff = simplify(pred_expr - gt_expr)
@@ -115,12 +181,7 @@ def check_mathematical_equivalence(pred: str, gt: str) -> bool:
         return pred_normalized.lower() == gt_normalized.lower()
 
 
-def accuracy_reward(
-    prompts: list[str],
-    completions: list[str],
-    answer: list[str],
-    **kwargs,
-) -> list[float]:
+def accuracy_reward(prompts: list, completions: list, answer: list[str] | None = None, **kwargs) -> list[float]:
     """
     Compute accuracy reward for a batch of completions.
 
@@ -137,8 +198,12 @@ def accuracy_reward(
     """
     rewards = []
 
-    for completion, gt in zip(completions, answer):
-        extracted = extract_answer(completion)
+    ground_truths = answer or kwargs.get("ground_truth")
+    if ground_truths is None:
+        raise ValueError("accuracy_reward requires `answer` or `ground_truth`.")
+
+    for completion, gt in zip(completions, ground_truths):
+        extracted = extract_answer(completion_to_text(completion))
 
         if extracted is None:
             # No valid answer format found
@@ -188,7 +253,7 @@ def compute_reward(
     return total_reward
 
 
-def format_reward(completions: list[str], **kwargs) -> list[float]:
+def format_reward(completions: list, **kwargs) -> list[float]:
     """
     Compute format reward based on presence of thinking and answer blocks.
 
@@ -202,14 +267,15 @@ def format_reward(completions: list[str], **kwargs) -> list[float]:
     rewards = []
 
     for completion in completions:
+        completion_text = completion_to_text(completion)
         reward = 0.0
 
-        # Check for thinking block (emoji U+1F914)
-        if "\U0001F914" in completion:
+        # Reward the project's agreed reasoning format.
+        if "½" in completion_text:
             reward += 0.05
 
         # Check for answer block
-        if extract_answer(completion) is not None:
+        if extract_answer(completion_text) is not None:
             reward += 0.05
 
         rewards.append(reward)

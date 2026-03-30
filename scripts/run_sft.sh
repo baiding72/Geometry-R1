@@ -36,7 +36,7 @@ DATA_DIR=${DATA_DIR:-"data"}
 OUTPUT_DIR=${OUTPUT_DIR:-"output/sft_phase1"}
 
 # Model configuration
-MODEL_NAME=${MODEL_NAME:-"Qwen/Qwen2-VL-2B-Instruct"}
+MODEL_NAME=${MODEL_NAME:-"Qwen/Qwen2.5-VL-3B-Instruct"}
 CONFIG_FILE=${CONFIG_FILE:-"configs/sft_config.yaml"}
 
 # Training configuration
@@ -60,41 +60,14 @@ mkdir -p $OUTPUT_DIR
 # -----------------------------------------------------------------------------
 # Training Command
 # -----------------------------------------------------------------------------
-# TODO: Replace with actual training script when ready
-# Current placeholder uses TRL CLI
-
 echo "Starting SFT training..."
 echo ""
 
-# Option 1: Using TRL CLI (simple)
-# trl sft \
-#     --model_name_or_path $MODEL_NAME \
-#     --train_file $DATA_DIR/sft_geometry3k.jsonl \
-#     --output_dir $OUTPUT_DIR \
-#     --num_train_epochs $NUM_EPOCHS \
-#     --per_device_train_batch_size $BATCH_SIZE \
-#     --learning_rate $LEARNING_RATE \
-#     --bf16 \
-#     --gradient_checkpointing
-
-# Option 2: Using accelerate launch (recommended for multi-GPU)
-# accelerate launch \
-#     --config_file configs/accelerate_config.yaml \
-#     src/train_sft.py \
-#     --model_name_or_path $MODEL_NAME \
-#     --train_file $DATA_DIR/sft_geometry3k.jsonl \
-#     --output_dir $OUTPUT_DIR \
-#     --num_train_epochs $NUM_EPOCHS \
-#     --per_device_train_batch_size $BATCH_SIZE \
-#     --learning_rate $LEARNING_RATE
-
-# Option 3: Direct Python script (placeholder)
-python -c "
-print('SFT Training Placeholder')
-print('=========================')
-print('Implement your training logic in src/train_sft.py')
-print('Or use TRL CLI as shown in run_sft.sh')
-"
+python -m src.train_sft \
+    --config $CONFIG_FILE \
+    --model_name_or_path $MODEL_NAME \
+    --train_file $DATA_DIR/sft_geometry3k.jsonl \
+    --output_dir $OUTPUT_DIR
 
 echo ""
 echo "=============================================="

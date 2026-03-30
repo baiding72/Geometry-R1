@@ -62,7 +62,7 @@ def get_cache_dir() -> Path:
     return get_project_root() / ".cache"
 
 
-def get_model_name_or_path(model_name: str = "Qwen/Qwen2-VL-2B-Instruct") -> str:
+def get_model_name_or_path(model_name: str = "Qwen/Qwen2.5-VL-3B-Instruct") -> str:
     """
     Get the model path, supporting local checkpoints.
 

@@ -2,7 +2,7 @@
 # Fine-tuning with Group Relative Policy Optimization using SymPy reward
 
 model:
-  name: "outputs/sft_phase1"  # Path to SFT checkpoint
+  name: "output/sft_phase1"  # Path to SFT checkpoint
   trust_remote_code: true
 
 grpo:
@@ -18,7 +18,7 @@ grpo:
   advantage_normalization: true
 
 training:
-  output_dir: "outputs/grpo_phase2"
+  output_dir: "output/grpo_phase2"
   num_train_epochs: 2
   per_device_train_batch_size: 2
   gradient_accumulation_steps: 8

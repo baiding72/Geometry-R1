@@ -4,7 +4,7 @@ Geometry-R1 Data Preparation Script
 
 Downloads and processes the hiyouga/geometry3k dataset for the two-stage
 training pipeline:
-- Phase 1 (SFT): First 500 samples with pseudo-CoT from Qwen-VL API
+- Phase 1 (SFT): First 500 samples with pseudo-CoT from a DashScope vision teacher
 - Phase 2 (RL): Remaining samples for GRPO training
 
 Usage:
@@ -30,28 +30,22 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import dashscope
-from dashscope import MultiModalConversation
 from datasets import load_dataset
 from PIL import Image
 from tqdm import tqdm
 
-from src.config import (
-    get_data_dir,
-    get_sft_image_dir,
-    get_rl_image_dir,
-    setup_directories,
-)
+from src.config import get_data_dir
 
 
 def generate_pseudo_cot_via_api(
     image_path: str,
     question: str,
     ground_truth: str,
+    teacher_model: str = "qwen3-vl-plus",
     max_retries: int = 3,
 ) -> str | None:
     """
-    Call Qwen-VL-Max API to generate pseudo chain-of-thought reasoning.
+    Call a DashScope vision model to generate pseudo chain-of-thought reasoning.
 
     This function takes an image path, question, and ground truth answer,
     and returns a formatted response with thinking process.
@@ -60,12 +54,20 @@ def generate_pseudo_cot_via_api(
         image_path: Absolute path to the image file
         question: The problem question text
         ground_truth: Ground truth answer
+        teacher_model: DashScope model used for distillation
         max_retries: Maximum number of retry attempts
 
     Returns:
         Formatted string with thinking blocks and <answer>...</answer> tags,
         or None if API call fails
     """
+    try:
+        from dashscope import MultiModalConversation
+    except ImportError as exc:
+        raise ImportError(
+            "dashscope is required for API distillation. Install project dependencies or run without --use-api."
+        ) from exc
+
     # 强制规范输出格式的强力 Prompt
     system_prompt = (
         "你是一个顶级的几何数学老师。你会被提供一张几何图片、一道问题，以及这道题的【最终标准答案】。\n"
@@ -95,7 +97,7 @@ def generate_pseudo_cot_via_api(
     for attempt in range(max_retries):
         try:
             response = MultiModalConversation.call(
-                model='qwen-vl-max',
+                model=teacher_model,
                 messages=messages,
                 result_format='message'
             )
@@ -158,6 +160,7 @@ def process_sft_split(
     output_dir: Path,
     image_dir: Path,
     use_api: bool = True,
+    teacher_model: str = "qwen3-vl-plus",
 ) -> list[dict]:
     """
     Process SFT split: first N samples with pseudo-CoT.
@@ -168,6 +171,7 @@ def process_sft_split(
         output_dir: Output directory for JSONL file
         image_dir: Directory to save images
         use_api: Whether to use real API for CoT generation
+        teacher_model: DashScope model used for distillation
 
     Returns:
         List of processed samples
@@ -177,7 +181,7 @@ def process_sft_split(
 
     print(f"\nProcessing SFT split ({num_samples} samples)...")
     if use_api:
-        print("Using Qwen-VL-Max API for pseudo-CoT generation...")
+        print(f"Using DashScope teacher model for pseudo-CoT generation: {teacher_model}")
     else:
         print("Using mock CoT generation (for testing)...")
 
@@ -225,6 +229,7 @@ def process_sft_split(
                 image_path=abs_image_path,
                 question=question,
                 ground_truth=answer,
+                teacher_model=teacher_model,
             )
 
             # Fallback to mock if API fails
@@ -358,7 +363,7 @@ def main():
         "--use-api",
         action="store_true",
         default=False,
-        help="Use Qwen-VL-Max API for pseudo-CoT generation (requires DASHSCOPE_API_KEY)",
+        help="Use DashScope multimodal API for pseudo-CoT generation (requires DASHSCOPE_API_KEY)",
     )
     parser.add_argument(
         "--api-key",
@@ -366,13 +371,23 @@ def main():
         default=None,
         help="DashScope API key (or set DASHSCOPE_API_KEY environment variable)",
     )
+    parser.add_argument(
+        "--teacher-model",
+        type=str,
+        default="qwen3-vl-plus",
+        help="DashScope teacher model for pseudo-CoT distillation",
+    )
 
     args = parser.parse_args()
 
     # Setup API key
     if args.api_key:
+        import dashscope
+
         dashscope.api_key = args.api_key
     elif os.environ.get("DASHSCOPE_API_KEY"):
+        import dashscope
+
         dashscope.api_key = os.environ.get("DASHSCOPE_API_KEY")
     else:
         if args.use_api:
@@ -406,6 +421,8 @@ def main():
     print(f"SFT samples: {args.sft_samples}")
     print(f"RL samples: {len(dataset) - args.sft_samples}")
     print(f"Use API: {args.use_api}")
+    if args.use_api:
+        print(f"Teacher model: {args.teacher_model}")
     print("=" * 60)
 
     # Process SFT split
@@ -415,6 +432,7 @@ def main():
         output_dir=data_dir,
         image_dir=sft_image_dir,
         use_api=args.use_api,
+        teacher_model=args.teacher_model,
     )
     save_jsonl(sft_samples, data_dir / "sft_geometry3k.jsonl")
 

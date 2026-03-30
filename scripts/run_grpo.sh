@@ -65,7 +65,7 @@ if [ ! -d "$SFT_CHECKPOINT" ]; then
     echo "Warning: SFT checkpoint not found at $SFT_CHECKPOINT"
     echo "Please run Phase 1 (SFT) training first."
     # Fall back to base model
-    MODEL_NAME="Qwen/Qwen2-VL-2B-Instruct"
+    MODEL_NAME="Qwen/Qwen2.5-VL-3B-Instruct"
     echo "Using base model: $MODEL_NAME"
 fi
 
@@ -75,46 +75,14 @@ mkdir -p $OUTPUT_DIR
 # -----------------------------------------------------------------------------
 # Training Command
 # -----------------------------------------------------------------------------
-# TODO: Replace with actual training script when ready
-# Current placeholder uses TRL GRPO API
-
 echo "Starting GRPO training..."
 echo ""
 
-# Option 1: Using TRL GRPO Trainer (placeholder)
-# trl grpo \
-#     --model_name_or_path $MODEL_NAME \
-#     --train_file $DATA_DIR/rl_geometry3k.jsonl \
-#     --output_dir $OUTPUT_DIR \
-#     --num_train_epochs $NUM_EPOCHS \
-#     --per_device_train_batch_size $BATCH_SIZE \
-#     --learning_rate $LEARNING_RATE \
-#     --num_generations $NUM_GENERATIONS \
-#     --temperature $TEMPERATURE \
-#     --bf16
-
-# Option 2: Using accelerate launch (recommended for multi-GPU)
-# accelerate launch \
-#     --config_file configs/accelerate_config.yaml \
-#     src/train_grpo.py \
-#     --model_name_or_path $MODEL_NAME \
-#     --train_file $DATA_DIR/rl_geometry3k.jsonl \
-#     --output_dir $OUTPUT_DIR \
-#     --reward_module src.reward \
-#     --num_train_epochs $NUM_EPOCHS \
-#     --per_device_train_batch_size $BATCH_SIZE \
-#     --learning_rate $LEARNING_RATE
-
-# Option 3: Direct Python script (placeholder)
-python -c "
-print('GRPO Training Placeholder')
-print('==========================')
-print('Implement your training logic in src/train_grpo.py')
-print('Or use TRL GRPO Trainer as shown in run_grpo.sh')
-print('')
-print('Reward function: src/reward/reward.py')
-print('  - accuracy_reward(): SymPy-based mathematical equivalence')
-"
+python -m src.train_grpo \
+    --config $CONFIG_FILE \
+    --model_name_or_path $MODEL_NAME \
+    --train_file $DATA_DIR/rl_geometry3k.jsonl \
+    --output_dir $OUTPUT_DIR
 
 echo ""
 echo "=============================================="

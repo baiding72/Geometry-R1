@@ -1,0 +1,148 @@
+"""
+Shared training and evaluation utilities for Geometry-R1.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+import yaml
+from datasets import load_dataset
+from PIL import Image
+from peft import LoraConfig, TaskType
+from torch.utils.data import Dataset
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from trl.data_utils import prepare_multimodal_messages
+
+
+IMAGE_PLACEHOLDER_PATTERN = re.compile(r"<image>\s*", re.IGNORECASE)
+
+
+def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
+    """Load a YAML config file."""
+    with Path(config_path).open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def strip_image_placeholder(text: str) -> str:
+    """Remove dataset-level image placeholders from prompts."""
+    normalized = IMAGE_PLACEHOLDER_PATTERN.sub("", text).strip()
+    return normalized or text.strip()
+
+
+def resolve_dtype(bf16: bool = False, fp16: bool = False):
+    """Resolve torch dtype lazily to avoid importing torch at module import time."""
+    import torch
+
+    if bf16 and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    if fp16 and torch.cuda.is_available():
+        return torch.float16
+    return "auto"
+
+
+def build_lora_config(model_config: dict[str, Any]) -> LoraConfig | None:
+    """Construct a LoRA config if PEFT is enabled."""
+    if not model_config.get("use_peft"):
+        return None
+
+    peft_kwargs = dict(model_config.get("peft_config", {}))
+    return LoraConfig(task_type=TaskType.CAUSAL_LM, **peft_kwargs)
+
+
+def load_processor(model_name_or_path: str, trust_remote_code: bool = True):
+    """Load the processor and ensure padding is configured."""
+    processor = AutoProcessor.from_pretrained(model_name_or_path, trust_remote_code=trust_remote_code)
+    tokenizer = getattr(processor, "tokenizer", processor)
+    if getattr(tokenizer, "pad_token", None) is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+    return processor
+
+
+def load_model(model_name_or_path: str, trust_remote_code: bool = True, bf16: bool = False, fp16: bool = False):
+    """Load the VLM with a dtype that matches the current device."""
+    model_kwargs: dict[str, Any] = {"trust_remote_code": trust_remote_code}
+    torch_dtype = resolve_dtype(bf16=bf16, fp16=fp16)
+    if torch_dtype != "auto":
+        model_kwargs["torch_dtype"] = torch_dtype
+    return AutoModelForImageTextToText.from_pretrained(model_name_or_path, **model_kwargs)
+
+
+def _load_image(image_path: str | Path) -> Image.Image:
+    """Load an image as RGB."""
+    with Image.open(image_path) as image:
+        return image.convert("RGB")
+
+
+def _make_user_message(prompt: str) -> list[dict[str, str]]:
+    return [{"role": "user", "content": strip_image_placeholder(prompt)}]
+
+
+class JsonlVisionDataset(Dataset):
+    """A lightweight dataset that lazily loads images from Geometry-R1 JSONL rows."""
+
+    def __init__(self, jsonl_path: str | Path, mode: str):
+        self.jsonl_path = Path(jsonl_path)
+        self.mode = mode
+        with self.jsonl_path.open("r", encoding="utf-8") as f:
+            self.rows = [json.loads(line) for line in f]
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        example = self.rows[index]
+        if self.mode == "sft":
+            messages = _make_user_message(example["prompt"])
+            messages.append({"role": "assistant", "content": example["completion"]})
+            return {
+                "messages": messages,
+                "images": [_load_image(example["image"])],
+                "ground_truth": example["ground_truth"],
+                "id": example["id"],
+            }
+        if self.mode == "grpo":
+            return {
+                "prompt": _make_user_message(example["prompt"]),
+                "images": [_load_image(example["image"])],
+                "answer": example["ground_truth"],
+                "ground_truth": example["ground_truth"],
+                "id": example["id"],
+            }
+        raise ValueError(f"Unsupported dataset mode: {self.mode}")
+
+
+def prepare_sft_dataset(jsonl_path: str | Path) -> Dataset:
+    """Convert the project JSONL into TRL-compatible multimodal SFT rows."""
+    return JsonlVisionDataset(jsonl_path, mode="sft")
+
+
+def prepare_grpo_dataset(jsonl_path: str | Path) -> Dataset:
+    """Convert the project JSONL into GRPO prompt rows."""
+    return JsonlVisionDataset(jsonl_path, mode="grpo")
+
+
+def build_generation_prompt(processor, prompt_messages: list[dict[str, Any]], images: list[Image.Image]) -> str:
+    """Render a multimodal chat prompt for generation."""
+    prompt_copy = copy.deepcopy(prompt_messages)
+    prepare_multimodal_messages(prompt_copy, num_images=len(images))
+    return processor.apply_chat_template(prompt_copy, tokenize=False, add_generation_prompt=True)
+
+
+def extract_assistant_text(generated_text: str, prompt_text: str) -> str:
+    """Remove the prompt prefix from decoded generations when present."""
+    if generated_text.startswith(prompt_text):
+        return generated_text[len(prompt_text) :].strip()
+    return generated_text.strip()
+
+
+def save_metrics(output_path: str | Path, payload: dict[str, Any]) -> None:
+    """Persist metrics JSON with stable formatting."""
+    with Path(output_path).open("w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.write("\n")
