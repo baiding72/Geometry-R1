@@ -16,9 +16,6 @@ from PIL import Image
 from peft import LoraConfig, PeftConfig, PeftModel, TaskType
 from torch.utils.data import Dataset
 from transformers import AutoModelForImageTextToText, AutoProcessor
-from trl.data_utils import prepare_multimodal_messages
-
-
 IMAGE_PLACEHOLDER_PATTERN = re.compile(r"<image>\s*", re.IGNORECASE)
 
 
@@ -193,11 +190,24 @@ def prepare_grpo_dataset(jsonl_path: str | Path) -> Dataset:
 def build_generation_prompt(processor, prompt_messages: list[dict[str, Any]], images: list[Image.Image]) -> str:
     """Render a multimodal chat prompt for generation."""
     prompt_copy = copy.deepcopy(prompt_messages)
-    try:
-        prepare_multimodal_messages(prompt_copy, len(images))
-    except TypeError:
-        # Some TRL versions expect the image objects instead of the image count.
-        prepare_multimodal_messages(prompt_copy, images)
+    image_included = False
+    for message in prompt_copy:
+        content = message.get("content", "")
+        if not isinstance(content, str):
+            continue
+
+        if message["role"] == "system":
+            message["content"] = [{"type": "text", "text": content}]
+        elif message["role"] == "user":
+            if not image_included:
+                placeholders = [{"type": "image"} for _ in range(len(images))]
+                message["content"] = [*placeholders, {"type": "text", "text": content}]
+                image_included = True
+            else:
+                message["content"] = [{"type": "text", "text": content}]
+        else:
+            message["content"] = [{"type": "text", "text": content}]
+
     return processor.apply_chat_template(prompt_copy, tokenize=False, add_generation_prompt=True)
 
 
