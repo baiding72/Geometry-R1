@@ -77,6 +77,16 @@ pip install --upgrade pip -q
 # -----------------------------------------------------------------------------
 echo "[4/5] Installing Python dependencies..."
 
+# Install a CUDA build recent enough for RTX 5090 / Blackwell-class GPUs.
+# We do this before syncing the rest of the project so the environment does not
+# keep an older incompatible torch wheel from the base image.
+echo "  Installing PyTorch with CUDA 12.8 wheels for RTX 5090 compatibility..."
+pip install --upgrade \
+  "torch>=2.7.0" \
+  "torchvision>=0.22.0" \
+  "torchaudio>=2.7.0" \
+  --index-url https://download.pytorch.org/whl/cu128
+
 # Check if using uv or pip
 if command -v uv &> /dev/null; then
     echo "  Using uv for package management..."

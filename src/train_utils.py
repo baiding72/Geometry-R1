@@ -28,6 +28,22 @@ def load_yaml_config(config_path: str | Path) -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def coerce_numeric_fields(config: dict[str, Any], field_names: list[str]) -> dict[str, Any]:
+    """Convert selected config fields from strings to numeric types when needed."""
+    normalized = dict(config)
+    for field in field_names:
+        value = normalized.get(field)
+        if isinstance(value, str):
+            try:
+                if any(ch in value.lower() for ch in [".", "e"]):
+                    normalized[field] = float(value)
+                else:
+                    normalized[field] = int(value)
+            except ValueError:
+                pass
+    return normalized
+
+
 def strip_image_placeholder(text: str) -> str:
     """Remove dataset-level image placeholders from prompts."""
     normalized = IMAGE_PLACEHOLDER_PATTERN.sub("", text).strip()

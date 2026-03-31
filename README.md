@@ -86,6 +86,19 @@ chmod +x scripts/setup_autodl.sh
 ./scripts/setup_autodl.sh
 ```
 
+For RTX 5090 instances, make sure PyTorch is installed from a recent CUDA wheel set.
+The project setup script installs CUDA 12.8 wheels by default. If you are using an
+older base image and hit `CUDA error: no kernel image is available for execution on the device`,
+reinstall PyTorch explicitly:
+
+```bash
+pip install --upgrade \
+  "torch>=2.7.0" \
+  "torchvision>=0.22.0" \
+  "torchaudio>=2.7.0" \
+  --index-url https://download.pytorch.org/whl/cu128
+```
+
 ## Configuration
 
 ### Path Configuration
@@ -127,6 +140,13 @@ Or use the setup script:
 ```bash
 ./scripts/setup_autodl.sh  # Automatically sets these variables
 ```
+
+### AutoDL Troubleshooting
+
+- `warmup_ratio is deprecated`: warning only, training can continue.
+- `CUDA error: no kernel image is available for execution on the device`: your
+  installed PyTorch/CUDA wheel is too old for the current GPU architecture.
+  Reinstall a recent CUDA 12.8 PyTorch build, then rerun training.
 
 ## Data Preparation
 

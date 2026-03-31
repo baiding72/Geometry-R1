@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.reward import accuracy_reward, format_reward
 from src.train_utils import (
     build_lora_config,
+    coerce_numeric_fields,
     load_processor,
     load_yaml_config,
     prepare_grpo_dataset,
@@ -38,14 +39,36 @@ def main() -> None:
     config = load_yaml_config(args.config)
 
     model_cfg = config["model"]
-    grpo_cfg = dict(config["grpo"])
-    training_cfg = dict(config["training"])
+    grpo_cfg = coerce_numeric_fields(
+        dict(config["grpo"]),
+        [
+            "num_generations",
+            "temperature",
+            "max_new_tokens",
+            "kl_coef",
+        ],
+    )
+    training_cfg = coerce_numeric_fields(
+        dict(config["training"]),
+        [
+            "num_train_epochs",
+            "per_device_train_batch_size",
+            "gradient_accumulation_steps",
+            "learning_rate",
+            "weight_decay",
+            "warmup_ratio",
+            "logging_steps",
+            "save_steps",
+            "save_total_limit",
+        ],
+    )
     reward_cfg = config["reward"]
     data_cfg = config["data"]
 
     model_name = args.model_name_or_path or model_cfg["name"]
     train_file = Path(args.train_file or data_cfg["train_file"])
-    output_dir = args.output_dir or training_cfg.pop("output_dir")
+    default_output_dir = training_cfg.pop("output_dir")
+    output_dir = args.output_dir or default_output_dir
 
     dataset = prepare_grpo_dataset(train_file)
     processor = load_processor(model_name, trust_remote_code=model_cfg.get("trust_remote_code", True))
