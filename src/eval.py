@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.reward import check_mathematical_equivalence, extract_answer
+from src.reward import check_mathematical_equivalence, extract_answer, extract_answer_relaxed
 from src.train_utils import (
     build_generation_prompt,
     extract_assistant_text,
@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_samples", type=int, default=128)
     parser.add_argument("--max_new_tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument(
+        "--relaxed_extraction",
+        action="store_true",
+        help="Use relaxed answer extraction for diagnostics when <answer> tags are missing.",
+    )
     return parser.parse_args()
 
 
@@ -54,6 +59,8 @@ def main() -> None:
     exact_matches = 0
     symbolic_matches = 0
     format_matches = 0
+    relaxed_exact_matches = 0
+    relaxed_symbolic_matches = 0
     rows = []
 
     generation_kwargs = {
@@ -80,6 +87,7 @@ def main() -> None:
         decoded = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
         completion = extract_assistant_text(decoded, prompt_text)
         predicted_answer = extract_answer(completion)
+        relaxed_answer = extract_answer_relaxed(completion) if args.relaxed_extraction else predicted_answer
 
         total += 1
         if predicted_answer is not None:
@@ -89,11 +97,18 @@ def main() -> None:
             if check_mathematical_equivalence(predicted_answer, answer):
                 symbolic_matches += 1
 
+        if args.relaxed_extraction and relaxed_answer is not None:
+            if relaxed_answer.strip() == answer.strip():
+                relaxed_exact_matches += 1
+            if check_mathematical_equivalence(relaxed_answer, answer):
+                relaxed_symbolic_matches += 1
+
         rows.append(
             {
                 "id": example["id"],
                 "prediction": completion,
                 "predicted_answer": predicted_answer,
+                "relaxed_predicted_answer": relaxed_answer,
                 "ground_truth": answer,
             }
         )
@@ -104,6 +119,9 @@ def main() -> None:
         "format_rate": format_matches / total if total else 0.0,
         "exact_match": exact_matches / total if total else 0.0,
         "symbolic_accuracy": symbolic_matches / total if total else 0.0,
+        "relaxed_exact_match": relaxed_exact_matches / total if total else 0.0,
+        "relaxed_symbolic_accuracy": relaxed_symbolic_matches / total if total else 0.0,
+        "relaxed_extraction": args.relaxed_extraction,
         "samples": rows,
     }
 
@@ -117,7 +135,9 @@ def main() -> None:
     print(
         f"format_rate={metrics['format_rate']:.4f}, "
         f"exact_match={metrics['exact_match']:.4f}, "
-        f"symbolic_accuracy={metrics['symbolic_accuracy']:.4f}"
+        f"symbolic_accuracy={metrics['symbolic_accuracy']:.4f}, "
+        f"relaxed_exact_match={metrics['relaxed_exact_match']:.4f}, "
+        f"relaxed_symbolic_accuracy={metrics['relaxed_symbolic_accuracy']:.4f}"
     )
 
 

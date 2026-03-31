@@ -60,6 +60,44 @@ def extract_answer(response: str) -> Optional[str]:
     return None
 
 
+def extract_answer_relaxed(response: str) -> Optional[str]:
+    """
+    Extract an answer from free-form completions when strict tags are absent.
+
+    Priority:
+    1. Strict <answer>...</answer> tags
+    2. Common final-answer cue phrases
+    3. Last numeric-looking expression in the completion
+    """
+    strict = extract_answer(response)
+    if strict is not None:
+        return strict
+
+    text = response.strip()
+    if not text:
+        return None
+
+    cue_patterns = [
+        r"(?:therefore|thus|so|hence|final answer|answer is|the answer is)\s*[:：]?\s*(.+)$",
+        r"(?:x\s*=\s*)(.+)$",
+    ]
+    for pattern in cue_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            candidate = match.group(1).strip().splitlines()[0].strip().rstrip(".")
+            if candidate:
+                return candidate
+
+    numeric_matches = re.findall(
+        r"(?<![A-Za-z])[-+]?(?:\d+\.\d+|\d+\/\d+|\d+)(?![A-Za-z])|\\frac\{[^{}]+\}\{[^{}]+\}|\\sqrt\{[^{}]+\}",
+        text,
+    )
+    if numeric_matches:
+        return numeric_matches[-1].strip()
+
+    return None
+
+
 def normalize_latex(latex_str: str) -> str:
     """
     Normalize LaTeX string for comparison.
