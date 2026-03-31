@@ -77,20 +77,38 @@ def extract_answer_relaxed(response: str) -> Optional[str]:
     if not text:
         return None
 
+    boxed_matches = re.findall(r"\\boxed\{([^{}]+)\}", text)
+    if boxed_matches:
+        return boxed_matches[-1].strip()
+
     cue_patterns = [
-        r"(?:therefore|thus|so|hence|final answer|answer is|the answer is)\s*[:：]?\s*(.+)$",
-        r"(?:x\s*=\s*)(.+)$",
+        r"(?:\btherefore\b|\bthus\b|\bhence\b|\bfinal answer\b|\banswer is\b|\bthe answer is\b)\s*[:：]?\s*(.+)",
+        r"(?:\bx\s*=\s*)(.+)",
     ]
     for pattern in cue_patterns:
-        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
         if match:
             candidate = match.group(1).strip().splitlines()[0].strip().rstrip(".")
             if candidate:
                 return candidate
 
+    tail_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    tail_lines = tail_lines[-8:]
+    for line in reversed(tail_lines):
+        line = re.sub(r"^[-*]\s*", "", line).rstrip(".")
+        if not line:
+            continue
+        boxed_match = re.search(r"\\boxed\{([^{}]+)\}", line)
+        if boxed_match:
+            return boxed_match.group(1).strip()
+        if re.fullmatch(r"[-+]?(?:\d+\.\d+|\d+\/\d+|\d+)", line):
+            return line
+        if re.fullmatch(r"[-+]?(?:\d+\.\d+|\d+\/\d+|\d+)\s*[A-Za-z%°]*", line):
+            return line.strip()
+
     numeric_matches = re.findall(
         r"(?<![A-Za-z])[-+]?(?:\d+\.\d+|\d+\/\d+|\d+)(?![A-Za-z])|\\frac\{[^{}]+\}\{[^{}]+\}|\\sqrt\{[^{}]+\}",
-        text,
+        "\n".join(tail_lines) if tail_lines else text,
     )
     if numeric_matches:
         return numeric_matches[-1].strip()
