@@ -193,7 +193,11 @@ def prepare_grpo_dataset(jsonl_path: str | Path) -> Dataset:
 def build_generation_prompt(processor, prompt_messages: list[dict[str, Any]], images: list[Image.Image]) -> str:
     """Render a multimodal chat prompt for generation."""
     prompt_copy = copy.deepcopy(prompt_messages)
-    prepare_multimodal_messages(prompt_copy, len(images))
+    try:
+        prepare_multimodal_messages(prompt_copy, len(images))
+    except TypeError:
+        # Some TRL versions expect the image objects instead of the image count.
+        prepare_multimodal_messages(prompt_copy, images)
     return processor.apply_chat_template(prompt_copy, tokenize=False, add_generation_prompt=True)
 
 

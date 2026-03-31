@@ -70,7 +70,8 @@ def main() -> None:
         answer = example["answer"]
 
         prompt_text = build_generation_prompt(processor, prompt, images)
-        inputs = processor(text=[prompt_text], images=images, return_tensors="pt", padding=True)
+        batch_images = [images]
+        inputs = processor(text=[prompt_text], images=batch_images, return_tensors="pt", padding=True)
         inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
 
         with torch.inference_mode():
