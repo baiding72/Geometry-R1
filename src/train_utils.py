@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 from datasets import load_dataset
 from PIL import Image
-from peft import LoraConfig, TaskType
+from peft import LoraConfig, PeftConfig, PeftModel, TaskType
 from torch.utils.data import Dataset
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from trl.data_utils import prepare_multimodal_messages
@@ -80,13 +80,60 @@ def load_processor(model_name_or_path: str, trust_remote_code: bool = True):
     return processor
 
 
+def is_peft_adapter_path(model_name_or_path: str | Path) -> bool:
+    """Return True if the path looks like a PEFT adapter checkpoint."""
+    path = Path(model_name_or_path)
+    return path.exists() and (path / "adapter_config.json").exists()
+
+
+def resolve_base_model_name(model_name_or_path: str | Path) -> str:
+    """Resolve the underlying base model for either a full model or adapter path."""
+    if is_peft_adapter_path(model_name_or_path):
+        peft_config = PeftConfig.from_pretrained(str(model_name_or_path))
+        return peft_config.base_model_name_or_path
+    return str(model_name_or_path)
+
+
 def load_model(model_name_or_path: str, trust_remote_code: bool = True, bf16: bool = False, fp16: bool = False):
     """Load the VLM with a dtype that matches the current device."""
     model_kwargs: dict[str, Any] = {"trust_remote_code": trust_remote_code}
     torch_dtype = resolve_dtype(bf16=bf16, fp16=fp16)
     if torch_dtype != "auto":
         model_kwargs["torch_dtype"] = torch_dtype
-    return AutoModelForImageTextToText.from_pretrained(model_name_or_path, **model_kwargs)
+
+    if is_peft_adapter_path(model_name_or_path):
+        peft_config = PeftConfig.from_pretrained(str(model_name_or_path))
+        base_model = AutoModelForImageTextToText.from_pretrained(peft_config.base_model_name_or_path, **model_kwargs)
+        return PeftModel.from_pretrained(base_model, str(model_name_or_path))
+
+    return AutoModelForImageTextToText.from_pretrained(str(model_name_or_path), **model_kwargs)
+
+
+def merge_peft_adapter(
+    adapter_path: str | Path,
+    output_path: str | Path,
+    trust_remote_code: bool = True,
+    bf16: bool = False,
+    fp16: bool = False,
+) -> Path:
+    """Merge a PEFT adapter into its base model and save a standalone checkpoint."""
+    adapter_path = Path(adapter_path)
+    output_path = Path(output_path)
+
+    if not is_peft_adapter_path(adapter_path):
+        raise ValueError(f"Expected a PEFT adapter directory, got: {adapter_path}")
+
+    model = load_model(str(adapter_path), trust_remote_code=trust_remote_code, bf16=bf16, fp16=fp16)
+    processor = load_processor(str(adapter_path), trust_remote_code=trust_remote_code)
+
+    if not isinstance(model, PeftModel):
+        raise TypeError(f"Expected a PeftModel when loading adapter path {adapter_path}")
+
+    merged_model = model.merge_and_unload()
+    output_path.mkdir(parents=True, exist_ok=True)
+    merged_model.save_pretrained(output_path)
+    processor.save_pretrained(output_path)
+    return output_path
 
 
 def _load_image(image_path: str | Path) -> Image.Image:

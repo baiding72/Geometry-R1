@@ -22,6 +22,7 @@ from src.train_utils import (
     load_model,
     load_processor,
     prepare_grpo_dataset,
+    resolve_base_model_name,
     save_metrics,
 )
 
@@ -42,7 +43,7 @@ def main() -> None:
     dataset = prepare_grpo_dataset(args.data_file)
     sample_count = min(args.max_samples, len(dataset)) if args.max_samples else len(dataset)
 
-    processor = load_processor(args.model_name_or_path)
+    processor = load_processor(resolve_base_model_name(args.model_name_or_path))
     model = load_model(args.model_name_or_path, bf16=True, fp16=False)
     model.eval()
 
