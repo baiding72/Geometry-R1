@@ -97,9 +97,9 @@ def resolve_base_model_name(model_name_or_path: str | Path) -> str:
 def load_model(model_name_or_path: str, trust_remote_code: bool = True, bf16: bool = False, fp16: bool = False):
     """Load the VLM with a dtype that matches the current device."""
     model_kwargs: dict[str, Any] = {"trust_remote_code": trust_remote_code}
-    torch_dtype = resolve_dtype(bf16=bf16, fp16=fp16)
-    if torch_dtype != "auto":
-        model_kwargs["torch_dtype"] = torch_dtype
+    model_dtype = resolve_dtype(bf16=bf16, fp16=fp16)
+    if model_dtype != "auto":
+        model_kwargs["dtype"] = model_dtype
 
     if is_peft_adapter_path(model_name_or_path):
         peft_config = PeftConfig.from_pretrained(str(model_name_or_path))
@@ -193,7 +193,7 @@ def prepare_grpo_dataset(jsonl_path: str | Path) -> Dataset:
 def build_generation_prompt(processor, prompt_messages: list[dict[str, Any]], images: list[Image.Image]) -> str:
     """Render a multimodal chat prompt for generation."""
     prompt_copy = copy.deepcopy(prompt_messages)
-    prepare_multimodal_messages(prompt_copy, num_images=len(images))
+    prepare_multimodal_messages(prompt_copy, len(images))
     return processor.apply_chat_template(prompt_copy, tokenize=False, add_generation_prompt=True)
 
 
